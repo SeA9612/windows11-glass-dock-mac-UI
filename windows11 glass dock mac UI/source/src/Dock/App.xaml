@@ -1,0 +1,51 @@
+<Application x:Class="GlassDock.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+ <Application.Resources>
+  <SolidColorBrush x:Key="Ink" Color="#35435D"/>
+  <SolidColorBrush x:Key="Muted" Color="#77839D"/>
+  <Style TargetType="TextBlock"><Setter Property="Foreground" Value="{StaticResource Ink}"/><Setter Property="FontFamily" Value="Segoe UI, Malgun Gothic"/><Setter Property="FontSize" Value="12"/></Style>
+  <Style TargetType="Button">
+   <Setter Property="Foreground" Value="{StaticResource Ink}"/><Setter Property="FontFamily" Value="Segoe UI, Malgun Gothic"/><Setter Property="FontSize" Value="12"/>
+   <Setter Property="Background" Value="#66FFFFFF"/><Setter Property="BorderBrush" Value="#B3FFFFFF"/><Setter Property="BorderThickness" Value="1"/>
+   <Setter Property="Padding" Value="10,6"/><Setter Property="Cursor" Value="Hand"/>
+   <Setter Property="HorizontalContentAlignment" Value="Center"/><Setter Property="VerticalContentAlignment" Value="Center"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+    <Border x:Name="Surface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10" Padding="{TemplateBinding Padding}">
+     <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+    </Border>
+    <ControlTemplate.Triggers>
+     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="Background" Value="#B0FFFFFF"/></Trigger>
+     <Trigger Property="IsPressed" Value="True"><Setter TargetName="Surface" Property="Opacity" Value="0.7"/></Trigger>
+     <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Surface" Property="Opacity" Value="0.42"/><Setter Property="Cursor" Value="Arrow"/></Trigger>
+     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="#AD99D8"/></Trigger>
+    </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style x:Key="DockButton" TargetType="Button">
+   <Setter Property="Width" Value="32"/><Setter Property="Height" Value="38"/><Setter Property="Margin" Value="0"/><Setter Property="Padding" Value="0"/><Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Cursor" Value="Hand"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+    <ContentPresenter x:Name="Tile" RenderTransformOrigin="0.5,0.85"><ContentPresenter.RenderTransform><ScaleTransform/></ContentPresenter.RenderTransform></ContentPresenter>
+    <ControlTemplate.Triggers>
+     <EventTrigger RoutedEvent="MouseEnter"><BeginStoryboard><Storyboard><DoubleAnimation Storyboard.TargetName="Tile" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1.09" Duration="0:0:0.18"/><DoubleAnimation Storyboard.TargetName="Tile" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1.09" Duration="0:0:0.18"/></Storyboard></BeginStoryboard></EventTrigger>
+     <EventTrigger RoutedEvent="MouseLeave"><BeginStoryboard><Storyboard><DoubleAnimation Storyboard.TargetName="Tile" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1" Duration="0:0:0.24"/><DoubleAnimation Storyboard.TargetName="Tile" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1" Duration="0:0:0.24"/></Storyboard></BeginStoryboard></EventTrigger>
+     <Trigger Property="IsPressed" Value="True"><Setter TargetName="Tile" Property="Opacity" Value="0.72"/></Trigger>
+    </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style TargetType="ComboBox">
+   <Setter Property="Foreground" Value="{StaticResource Muted}"/><Setter Property="FontFamily" Value="Segoe UI, Malgun Gothic"/><Setter Property="FontSize" Value="12"/><Setter Property="Padding" Value="12,0,30,0"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBox">
+    <Grid>
+     <ToggleButton Focusable="False" IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+      <ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border CornerRadius="9" Background="#66FFFFFF" BorderBrush="#BBFFFFFF" BorderThickness="1"><Path Data="M 0,0 L 4,4 8,0" Stroke="#77839D" StrokeThickness="1.6" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,11,0"/></Border></ControlTemplate></ToggleButton.Template>
+     </ToggleButton>
+     <ContentPresenter Margin="{TemplateBinding Padding}" Content="{TemplateBinding SelectionBoxItem}" IsHitTestVisible="False" VerticalAlignment="Center"/>
+     <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
+      <Border Background="#FAF7F8FC" BorderBrush="#D9DEEB" BorderThickness="1" CornerRadius="10" Padding="5" MinWidth="{Binding ActualWidth,RelativeSource={RelativeSource TemplatedParent}}" Margin="0,4,0,0"><ScrollViewer MaxHeight="220"><ItemsPresenter/></ScrollViewer></Border>
+     </Popup>
+    </Grid>
+    <ControlTemplate.Triggers><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.55"/></Trigger></ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style TargetType="ComboBoxItem"><Setter Property="Padding" Value="10,7"/><Setter Property="Foreground" Value="{StaticResource Ink}"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBoxItem"><Border x:Name="Item" CornerRadius="6" Padding="{TemplateBinding Padding}"><ContentPresenter/></Border><ControlTemplate.Triggers><Trigger Property="IsHighlighted" Value="True"><Setter TargetName="Item" Property="Background" Value="#E9E3F5"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
+ </Application.Resources>
+</Application>
