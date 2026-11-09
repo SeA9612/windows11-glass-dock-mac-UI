@@ -92,3 +92,7 @@
 - [후속 수정 인수인계](../windows11%20glass%20dock%20mac%20UI/source/START_HERE_TRANSFER_KO.md), [실제 아이콘·작은 독](../windows11%20glass%20dock%20mac%20UI/source/docs/DENSE_DOCK_ICONS_20261105_KO.md)
 - [휴지통·최종 구역 배치](../windows11%20glass%20dock%20mac%20UI/source/docs/RECYCLE_ORDER_20261105_KO.md), [유리 미리보기·권한 보류](../windows11%20glass%20dock%20mac%20UI/source/docs/GLASS_PREVIEW_20261105_KO.md)
 - [현재 실행 안내](../windows11%20glass%20dock%20mac%20UI/README.md), [제품 버전](../windows11%20glass%20dock%20mac%20UI/source/src/Dock/Dock.csproj)
+
+## 추가 기록 — 2026-11-09: 저장소 소개와 이미지
+
+저장소 첫 화면과 실행 폴더 README에 한국어 프로젝트 소개, 주요 기능과 시작 안내, 소개용 일러스트를 추가했습니다. 이미지는 실제 실행 캡처가 아닌 디자인 소개용이라고 명시했습니다. 기존 릴리즈 노트 내용은 보존했으며, 제품 소스·실행 파일·버전은 변경하지 않았습니다.
