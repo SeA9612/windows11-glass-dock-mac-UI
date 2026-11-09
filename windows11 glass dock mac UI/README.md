@@ -1,5 +1,7 @@
 # Windows 11 GlassDock — mac UI
 
+[버전별 Release Notes](../Release%20Notes/README.md) · [현재 0.2.1 변경 사항](../Release%20Notes/Release%20Note0.2.1%20ver.md)
+
 Windows 11 x64용 유리 효과 독입니다. 현재 PC에서 실행 중인 `완성본 ex1/실행파일/GlassDock.exe`와 해당 배포본의 소스를 정리했습니다.
 
 ## 다운로드와 실행
