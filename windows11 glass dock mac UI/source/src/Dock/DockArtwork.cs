@@ -59,6 +59,7 @@ internal sealed class AppIconView : Grid
         Update(count,false);
     }
     internal void SetImage(ImageSource source)=>image.Source=source;
+    internal ImageSource? Source=>image.Source;
     internal void Update(int count,bool vertical)
     {
         Width=vertical?DockMetrics.Cross:DockMetrics.Icon;Height=vertical?DockMetrics.Icon:DockMetrics.Cross;

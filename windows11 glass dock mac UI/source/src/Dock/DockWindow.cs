@@ -65,6 +65,21 @@ public sealed class DockWindow : Window
     DateTime lastClick;
     DateTime ignoreAutomaticForegroundUntil;
     Guid? previousDesktop;
+    readonly GenieAnimator genie;
+    readonly MinimizeButtonHook minimizeHook;
+    // Mode B: minimized windows shown as thumbnails between the apps and the trash.
+    sealed class MinimizedSlot
+    {
+        internal required Button Button {get;init;}
+        internal required Grid Cell {get;init;}
+        internal required Image Thumb {get;init;}
+        internal required Image Badge {get;init;}
+        internal bool Removing {get;set;}
+        internal bool? Vertical {get;set;}
+    }
+    readonly StackPanel minimizedPanel=new();
+    readonly Dictionary<nint,MinimizedSlot> slots=new();
+    readonly HashSet<nint> landingSlots=new();
     public DockWindow():this(SettingsStore.Load(),true){}
     internal DockWindow(DockSettings settings,bool persistSettings,IRecycleBin? recycleBin=null)
     {
@@ -72,7 +87,7 @@ public sealed class DockWindow : Window
         this.recycleBin=recycleBin??new WindowsRecycleBin();
         StartupDiagnostics.Write("DockWindow constructor entered");
         catalog.PinnedPaths=settings.Pins;
-        Title="GlassDock 0.2.1 · 창 선택 수정"; WindowStyle=WindowStyle.None; ResizeMode=ResizeMode.NoResize;
+        Title="GlassDock 0.3.0 · 지니 최소화 효과"; WindowStyle=WindowStyle.None; ResizeMode=ResizeMode.NoResize;
         bool materialReview=Environment.GetEnvironmentVariable("GLASSDOCK_MATERIAL_REVIEW")=="1";
         Background=Brushes.Transparent; Topmost=true; ShowInTaskbar=materialReview; ShowActivated=materialReview;
         GlassBackdrop.Prepare(this);
@@ -100,12 +115,18 @@ public sealed class DockWindow : Window
         recycleButton.Style=(Style)FindResource("DockButton");recycleButton.Content=recycleView;recycleButton.AllowDrop=false;
         recycleButton.Click+=(_,_)=>OpenRecycleBin();recycleButton.ContextMenu=BuildRecycleMenu();
         AutomationProperties.SetName(recycleButton,"Windows 휴지통");
-        recycleSection.Children.Add(recycleDivider);recycleSection.Children.Add(recycleButton);
+        recycleSection.Children.Add(recycleDivider);recycleSection.Children.Add(minimizedPanel);recycleSection.Children.Add(recycleButton);
+        genie=new GenieAnimator(settings,Dispatcher) {Target=GenieTarget,Edge=()=>settings.Edge};
+        genie.MinimizeStarted+=h=>{if(genie.ThumbnailMode){landingSlots.Add(h);Refresh();UpdateLayout();}};
+        genie.Landed+=h=>{landingSlots.Remove(h);RefreshSlot(h);Dispatcher.BeginInvoke(catalog.Refresh,DispatcherPriority.Background);};
+        genie.RestoreStarted+=RefreshSlot;
+        minimizeHook=new MinimizeButtonHook(Dispatcher,MinimizeFromButton) {Enabled=settings.GenieEnabled};
         handle.ContextMenu=BuildSettings();glass.ContextMenu=BuildSettings(); dockBody.Children.Add(handle); dockBody.Children.Add(iconViewport);dockBody.Children.Add(recycleSection);root.Children.Add(dockBody);
-        tray=new Forms.NotifyIcon { Icon=System.Drawing.SystemIcons.Application, Text="GlassDock 0.2.1", Visible=true };
+        tray=new Forms.NotifyIcon { Icon=System.Drawing.SystemIcons.Application, Text="GlassDock 0.3.0", Visible=true };
         StartupDiagnostics.Write("Tray icon created");
         var menu=new Forms.ContextMenuStrip(); menu.Items.Add("독 표시",null,(_,_)=>Dispatcher.Invoke(()=>{Show();Reveal();Place();}));
         menu.Items.Add("종료",null,(_,_)=>Dispatcher.Invoke(Close)); tray.ContextMenuStrip=menu; tray.DoubleClick+=(_,_)=>Dispatcher.Invoke(()=>{Show();Reveal();});
+        catalog.Changed+=()=>{minimizeHook.SetEligible(catalog.Windows.Select(w=>w.Handle));genie.ForgetClosed();};
         catalog.Changed+=Refresh;
         catalog.ForegroundChanged+=h=> {
             if(Native.GetWindowThreadProcessId(h,out uint pid)!=0 && pid==Environment.ProcessId) return;
@@ -142,7 +163,7 @@ public sealed class DockWindow : Window
         edgeTimer.Tick+=(_,_)=>CheckEdge();edgeTimer.Start();
         recycleTimer.Tick+=(_,_)=>RefreshRecycleBin();
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged+=DisplayChanged;
-        Closed+=(_,_)=> { isClosed=true;edgeTimer.Stop();recycleTimer.Stop();activationTimer.Stop();hoverTimer.Stop();previewLeaveTimer.Stop();activePreview?.Close();catalog.Dispose();appIcons.Dispose();tray.Dispose();Microsoft.Win32.SystemEvents.DisplaySettingsChanged-=DisplayChanged;Save(); };
+        Closed+=(_,_)=> { isClosed=true;minimizeHook.Dispose();genie.Dispose();edgeTimer.Stop();recycleTimer.Stop();activationTimer.Stop();hoverTimer.Stop();previewLeaveTimer.Stop();activePreview?.Close();catalog.Dispose();appIcons.Dispose();tray.Dispose();Microsoft.Win32.SystemEvents.DisplaySettingsChanged-=DisplayChanged;Save(); };
         StartupDiagnostics.Write("DockWindow constructor completed");
     }
     void DisplayChanged(object? sender,EventArgs e)=>Dispatcher.BeginInvoke(()=>{activePreview?.Close();Place();Refresh();});
@@ -165,6 +186,7 @@ public sealed class DockWindow : Window
         { var m=new MenuItem { Header=edge switch {"Bottom"=>"아래","Top"=>"위","Left"=>"왼쪽",_=>"오른쪽"} }; m.Click+=(_,_)=>{settings.Edge=edge;policy.Reset();Refresh();Save();Place();};menu.Items.Add(m); }
         var auto=new MenuItem {Header="자동 숨김",IsCheckable=true,IsChecked=settings.AutoHide}; auto.Click+=(_,_)=>{settings.AutoHide=auto.IsChecked;Reveal();Save();}; menu.Items.Add(auto);
         menu.Items.Add(HoverPreviewSetting());
+        menu.Items.Add(GenieSettings());
         var monitors=new MenuItem {Header="모니터"};
         monitors.SubmenuOpened+=(_,_)=>{monitors.Items.Clear(); foreach(var screen in Forms.Screen.AllScreens) {var item=new MenuItem {Header=screen.DeviceName}; item.Click+=(_,_)=>{settings.Monitor=screen.DeviceName;Save();Place();};monitors.Items.Add(item);} };menu.Items.Add(monitors);
         var add=new MenuItem {Header="프로그램 고정 (.exe / .lnk)"};add.Click+=(_,_)=>{
@@ -176,6 +198,137 @@ public sealed class DockWindow : Window
         var exit=new MenuItem {Header="독 종료"};exit.Click+=(_,_)=>Close();menu.Items.Add(exit);return menu;
     }
     void Save(){if(persistSettings)SettingsStore.Save(settings);}
+    MenuItem GenieSettings()
+    {
+        var root=new MenuItem {Header="최소화 효과 (지니)"};
+        var enabled=new MenuItem {Header="지니 효과 사용",IsCheckable=true};
+        enabled.Click+=(_,_)=>{settings.GenieEnabled=enabled.IsChecked;minimizeHook.Enabled=settings.GenieEnabled;Save();};
+        root.Items.Add(enabled);root.Items.Add(new Separator());
+        var iconMode=new MenuItem {Header="앱 아이콘으로 들어가기"};
+        var thumbnailMode=new MenuItem {Header="독에 창 썸네일로 남기"};
+        void SetMode(string mode){settings.GenieMode=mode;landingSlots.Clear();Save();Refresh();}
+        iconMode.Click+=(_,_)=>SetMode("Icon");thumbnailMode.Click+=(_,_)=>SetMode("Thumbnail");
+        root.Items.Add(iconMode);root.Items.Add(thumbnailMode);root.Items.Add(new Separator());
+        var speed=new MenuItem {Header="속도"};
+        var speeds=new List<MenuItem>();
+        foreach(var value in GenieAnimator.Speeds)
+        {
+            var item=new MenuItem {Header=value switch {0.5=>"아주 느리게 (0.5배)",0.75=>"느리게 (0.75배)",1=>"기본 (macOS와 같음)",1.5=>"빠르게 (1.5배)",_=>"아주 빠르게 (2배)"},Tag=value};
+            item.Click+=(_,_)=>{settings.GenieSpeed=value;Save();};
+            speed.Items.Add(item);speeds.Add(item);
+        }
+        root.Items.Add(speed);
+        root.SubmenuOpened+=(_,_)=>{
+            enabled.IsChecked=settings.GenieEnabled;
+            iconMode.IsChecked=settings.GenieMode!="Thumbnail";thumbnailMode.IsChecked=settings.GenieMode=="Thumbnail";
+            foreach(var item in speeds)item.IsChecked=Math.Abs(settings.GenieSpeed-(double)item.Tag)<0.01;
+        };
+        return root;
+    }
+    void MinimizeFromButton(nint hwnd)
+    {
+        void Minimize()=>Native.PostMessage(hwnd,0x112,0xF020,0); // WM_SYSCOMMAND SC_MINIMIZE, as the button would
+        var window=catalog.Windows.FirstOrDefault(w=>w.Handle==hwnd);
+        if(window==null||isClosed){Minimize();return;}
+        policy.Reset();CloseHoverPreview();
+        genie.Minimize(hwnd,window.Path,Minimize);
+        Dispatcher.BeginInvoke(catalog.Refresh,DispatcherPriority.Background);
+    }
+    // Where a window lands in the dock, in physical pixels, keeping its aspect ratio.
+    Native.Rect GenieTarget(nint hwnd,string path,Native.Rect source)
+    {
+        double aspect=(source.Right-source.Left)/(double)Math.Max(1,source.Bottom-source.Top);
+        var dpi=VisualTreeHelper.GetDpi(this);
+        FrameworkElement? anchor=null;double inset=0;
+        if(genie.ThumbnailMode&&slots.TryGetValue(hwnd,out var slot)){anchor=slot.Cell;inset=1;}
+        else if(buttons.TryGetValue(path,out var button))anchor=button;
+        if(anchor!=null&&!hidden&&IsVisible&&PresentationSource.FromVisual(anchor)!=null)
+        {
+            var origin=anchor.PointToScreen(new Point());
+            double size=(DockMetrics.Icon-inset*2)*dpi.DpiScaleX;
+            double w=aspect>=1?size:size*aspect,h=aspect>=1?size/aspect:size;
+            double x=origin.X+inset*dpi.DpiScaleX+(size-w)/2,y=origin.Y+inset*dpi.DpiScaleY+(size-h)/2;
+            return new Native.Rect {Left=(int)Math.Round(x),Top=(int)Math.Round(y),Right=(int)Math.Round(x+w),Bottom=(int)Math.Round(y+h)};
+        }
+        // Dock hidden: aim at the middle of the dock's screen edge.
+        var area=Screen().WorkingArea;int s=(int)Math.Round(DockMetrics.Icon*dpi.DpiScaleX);
+        int cx=area.Left+area.Width/2,cy=area.Top+area.Height/2;
+        return settings.Edge switch
+        {
+            "Top"=>new Native.Rect {Left=cx-s/2,Top=area.Top,Right=cx+s/2,Bottom=area.Top+s},
+            "Left"=>new Native.Rect {Left=area.Left,Top=cy-s/2,Right=area.Left+s,Bottom=cy+s/2},
+            "Right"=>new Native.Rect {Left=area.Right-s,Top=cy-s/2,Right=area.Right,Bottom=cy+s/2},
+            _=>new Native.Rect {Left=cx-s/2,Top=area.Bottom-s,Right=cx+s/2,Bottom=area.Bottom},
+        };
+    }
+    void UpdateMinimizedSlots(bool vertical)
+    {
+        minimizedPanel.Orientation=vertical?Orientation.Vertical:Orientation.Horizontal;
+        var wanted=new List<nint>();
+        if(genie.ThumbnailMode)
+        {
+            foreach(var w in catalog.Windows)if(w.Minimized||landingSlots.Contains(w.Handle)||genie.IsBusy(w.Handle))wanted.Add(w.Handle);
+            foreach(var h in landingSlots)if(!wanted.Contains(h))wanted.Add(h);
+        }
+        foreach(var (h,slot) in slots.ToList())if(!wanted.Contains(h)&&!slot.Removing)AnimateSlot(h,slot,vertical,false);
+        foreach(var h in wanted)
+        {
+            if(!slots.TryGetValue(h,out var slot))
+            {
+                slot=CreateSlot(h);slots[h]=slot;minimizedPanel.Children.Add(slot.Button);
+                SizeSlot(slot,vertical);AnimateSlot(h,slot,vertical,true);
+            }
+            else if(slot.Removing||slot.Vertical!=vertical){SizeSlot(slot,vertical);AnimateSlot(h,slot,vertical,true);}
+            RefreshSlot(h);
+        }
+    }
+    MinimizedSlot CreateSlot(nint hwnd)
+    {
+        var thumb=new Image {Width=DockMetrics.Icon-2,Height=DockMetrics.Icon-2,Stretch=Stretch.Uniform,Margin=new Thickness(1),IsHitTestVisible=false};
+        RenderOptions.SetBitmapScalingMode(thumb,BitmapScalingMode.HighQuality);
+        var badge=new Image {Width=13,Height=13,HorizontalAlignment=HorizontalAlignment.Right,VerticalAlignment=VerticalAlignment.Bottom,IsHitTestVisible=false};
+        // Transparent background so the whole cell takes clicks, not just image pixels.
+        var cell=new Grid {Width=DockMetrics.Icon,Height=DockMetrics.Icon,HorizontalAlignment=HorizontalAlignment.Left,VerticalAlignment=VerticalAlignment.Top,Background=Brushes.Transparent};
+        cell.Children.Add(thumb);cell.Children.Add(badge);
+        var button=new Button {Style=(Style)FindResource("DockButton"),Content=cell,ClipToBounds=true,AllowDrop=false};
+        button.Click+=(_,_)=>{
+            var w=catalog.Windows.FirstOrDefault(x=>x.Handle==hwnd);
+            if(w!=null){policy.Reset();CloseHoverPreview();Activate(w);}
+        };
+        AutomationProperties.SetName(button,"최소화된 창");
+        return new MinimizedSlot {Button=button,Cell=cell,Thumb=thumb,Badge=badge};
+    }
+    void RefreshSlot(nint hwnd)
+    {
+        if(!slots.TryGetValue(hwnd,out var slot))return;
+        var window=catalog.Windows.FirstOrDefault(w=>w.Handle==hwnd);
+        ImageSource? icon=window!=null&&buttons.TryGetValue(window.Path,out var b)&&b.Content is AppIconView view?view.Source:null;
+        var image=genie.Image(hwnd);
+        slot.Thumb.Source=(ImageSource?)image??icon;
+        slot.Badge.Source=image!=null?icon:null;
+        // Hidden while the genie is flying into or out of this slot.
+        slot.Thumb.Opacity=slot.Badge.Opacity=genie.IsBusy(hwnd)||landingSlots.Contains(hwnd)?0:1;
+        slot.Button.ToolTip=window!=null?window.Title+" · 클릭해서 복원":"최소화된 창";
+    }
+    void SizeSlot(MinimizedSlot slot,bool vertical)
+    {
+        slot.Button.BeginAnimation(WidthProperty,null);slot.Button.BeginAnimation(HeightProperty,null);
+        slot.Button.Width=vertical?DockMetrics.Cross:0;slot.Button.Height=vertical?0:DockMetrics.Cross;
+        slot.Vertical=vertical;
+    }
+    void AnimateSlot(nint hwnd,MinimizedSlot slot,bool vertical,bool open)
+    {
+        slot.Removing=!open;slot.Button.IsHitTestVisible=open;
+        var property=vertical?HeightProperty:WidthProperty;
+        double from=vertical?slot.Button.ActualHeight:slot.Button.ActualWidth;
+        if(double.IsNaN(from)||!slot.Button.IsLoaded)from=open?0:DockMetrics.Icon+DockMetrics.Gap;
+        var motion=new DoubleAnimation(from,open?DockMetrics.Icon+DockMetrics.Gap:0,genie.SlotDuration) {EasingFunction=new SineEase {EasingMode=EasingMode.EaseInOut}};
+        if(!open)motion.Completed+=(_,_)=>{
+            if(!slot.Removing||!slots.TryGetValue(hwnd,out var current)||current!=slot)return;
+            slots.Remove(hwnd);minimizedPanel.Children.Remove(slot.Button);
+        };
+        slot.Button.BeginAnimation(property,motion);
+    }
     void Refresh()
     {
         if(refreshing || dragging || movingDock) return;refreshing=true;
@@ -267,6 +420,7 @@ public sealed class DockWindow : Window
             recycleDivider.VerticalAlignment=VerticalAlignment.Center;recycleDivider.HorizontalAlignment=HorizontalAlignment.Center;
             recycleButton.Width=vertical?DockMetrics.Cross:DockMetrics.Icon;recycleButton.Height=vertical?DockMetrics.Icon:DockMetrics.Cross;
             recycleView.Update(0,vertical);
+            UpdateMinimizedSlots(vertical);
             if(!catalog.DesktopAvailable) ToolTip="현재 가상 데스크톱 확인 실패: 창 제어가 제한됩니다.";
         } finally {refreshing=false;}
     }
@@ -396,9 +550,15 @@ public sealed class DockWindow : Window
         lastApp=path;lastClick=DateTime.UtcNow;
         switch(action) {
             case WindowAction.Launch: if(catalog.DesktopAvailable)Launch(path);break;
-            case WindowAction.MinimizeOne:ignoreAutomaticForegroundUntil=DateTime.UtcNow.AddMilliseconds(700);Native.ShowWindowAsync(foreground,6);break;
-            case WindowAction.MinimizeAll:foreach(var w in windows)Native.ShowWindowAsync(w.Handle,6);break;
-            case WindowAction.RestoreAll:foreach(var w in windows)Native.ShowWindowAsync(w.Handle,9);Activate(windows[0]);break;
+            case WindowAction.MinimizeOne:
+                ignoreAutomaticForegroundUntil=DateTime.UtcNow.AddMilliseconds(700);
+                var active=foreground;genie.Minimize(active,path,()=>Native.ShowWindowAsync(active,6));break;
+            case WindowAction.MinimizeAll:
+                foreach(var w in windows.Where(w=>!Native.IsIconic(w.Handle))){var h=w.Handle;genie.Minimize(h,path,()=>Native.ShowWindowAsync(h,6));}
+                break;
+            case WindowAction.RestoreAll:
+                foreach(var w in windows.Skip(1))genie.Restore(w.Handle,path,null);
+                Activate(windows[0]);break;
             case WindowAction.Activate:Activate(windows.FirstOrDefault(w=>!Native.IsIconic(w.Handle))??windows[0]);break;
         }
         Dispatcher.BeginInvoke(catalog.Refresh,DispatcherPriority.Background);
@@ -407,6 +567,13 @@ public sealed class DockWindow : Window
     {
         activationTimer.Stop();pendingActivation=null;
         if(!catalog.IsOnCurrentDesktop(w.Handle)){ToolTip="창이 닫혔거나 현재 작업공간에 없습니다.";return;}
+        if(genie.IsBusy(w.Handle))return;
+        if(Native.IsIconic(w.Handle)&&genie.CanAnimateRestore(w.Handle))
+        {
+            // Bring the window to the front once the reverse genie has finished.
+            genie.Restore(w.Handle,w.Path,()=>{pendingActivation=w;activationAttempts=0;FinishActivation();});
+            return;
+        }
         pendingActivation=w;activationAttempts=0;
         if(Native.IsIconic(w.Handle))Native.ShowWindowAsync(w.Handle,9);
         FinishActivation();

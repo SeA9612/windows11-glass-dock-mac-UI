@@ -48,9 +48,13 @@ internal sealed class HostBackdrop : IDisposable
             classRegistered = true;
         }
         bool review = Environment.GetEnvironmentVariable("GLASSDOCK_MATERIAL_REVIEW") == "1";
-        uint exStyle = 0x00200000 | 0x08000000 | 0x20 | 0x8 | (review ? 0x40000u : 0x80u);
+        // WS_EX_LAYERED + WS_EX_TRANSPARENT makes the material click-through for every
+        // window below it. HTTRANSPARENT alone only passes clicks to this process's own
+        // windows, so other apps under the glass (or its shadow) lost their clicks.
+        uint exStyle = 0x00200000 | 0x08000000 | 0x80000 | 0x20 | 0x8 | (review ? 0x40000u : 0x80u);
         hwnd = CreateWindowEx(exStyle, WindowClass, "GlassDock native material", 0x80000000, 0, 0, 1, 1, 0, 0, GetModuleHandle(null), 0);
         if (hwnd == 0) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        Native.SetLayeredWindowAttributes(hwnd, 0, 255, 2);
         int enabled = 1;
         Marshal.ThrowExceptionForHR(Native.DwmSetWindowAttribute(hwnd, 17, ref enabled, 4));
         compositor = new Compositor();

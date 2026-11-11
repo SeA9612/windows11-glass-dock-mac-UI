@@ -9,6 +9,11 @@ public sealed class DockSettings
     public string Monitor { get; set; } = "";
     public bool AutoHide { get; set; }
     public bool HoverPreviews { get; set; } = true;
+    // Genie minimize effect. Mode "Icon": window goes into its app icon.
+    // Mode "Thumbnail": window stays in the dock as a thumbnail next to the trash.
+    public bool GenieEnabled { get; set; } = true;
+    public string GenieMode { get; set; } = "Icon";
+    public double GenieSpeed { get; set; } = 1.0;
     public List<string> Pins { get; set; } = new();
     public List<string> Order { get; set; } = new();
     public int LayoutVersion { get; set; }

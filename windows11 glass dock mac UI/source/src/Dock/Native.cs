@@ -40,6 +40,38 @@ internal static class Native
     [DllImport("dwmapi.dll")] internal static extern int DwmQueryThumbnailSourceSize(nint thumbnail,out Point size);
     [DllImport("dwmapi.dll")] internal static extern int DwmUnregisterThumbnail(nint thumbnail);
     [DllImport("dwmapi.dll")] internal static extern int DwmUpdateThumbnailProperties(nint thumbnail,ref ThumbnailProperties properties);
+    [DllImport("dwmapi.dll",EntryPoint="DwmGetWindowAttribute")] internal static extern int DwmGetWindowRect(nint hwnd,int attribute,out Rect value,int size);
+    // Window snapshot (genie effect).
+    [DllImport("user32.dll")] internal static extern bool PrintWindow(nint hwnd,nint dc,uint flags);
+    [DllImport("user32.dll")] internal static extern bool IsHungAppWindow(nint hwnd);
+    [DllImport("user32.dll")] internal static extern bool IsZoomed(nint hwnd);
+    [DllImport("user32.dll")] internal static extern uint GetDpiForWindow(nint hwnd);
+    [DllImport("user32.dll")] internal static extern nint GetDC(nint hwnd);
+    [DllImport("user32.dll")] internal static extern int ReleaseDC(nint hwnd,nint dc);
+    [DllImport("gdi32.dll")] internal static extern nint CreateCompatibleDC(nint dc);
+    [DllImport("gdi32.dll")] internal static extern bool DeleteDC(nint dc);
+    [DllImport("gdi32.dll")] internal static extern nint SelectObject(nint dc,nint obj);
+    [DllImport("gdi32.dll")] internal static extern nint CreateDIBSection(nint dc,ref BitmapInfoHeader info,uint usage,out nint bits,nint section,uint offset);
+    [StructLayout(LayoutKind.Sequential)] internal struct BitmapInfoHeader
+    { public int Size,Width,Height; public short Planes,BitCount; public int Compression,SizeImage,XPelsPerMeter,YPelsPerMeter,ClrUsed,ClrImportant; }
+    // Hiding the OS minimize animation.
+    [DllImport("user32.dll")] internal static extern bool SetLayeredWindowAttributes(nint hwnd,uint colorKey,byte alpha,uint flags);
+    [DllImport("user32.dll")] internal static extern bool RedrawWindow(nint hwnd,nint rect,nint region,uint flags);
+    // Minimize button hook.
+    internal delegate nint HookProc(int code,nint w,nint l);
+    [DllImport("user32.dll")] internal static extern nint SetWindowsHookEx(int id,HookProc proc,nint module,uint thread);
+    [DllImport("user32.dll")] internal static extern bool UnhookWindowsHookEx(nint hook);
+    [DllImport("user32.dll")] internal static extern nint CallNextHookEx(nint hook,int code,nint w,nint l);
+    [DllImport("user32.dll")] internal static extern int GetMessage(out Msg msg,nint hwnd,uint min,uint max);
+    [DllImport("user32.dll")] internal static extern bool PostThreadMessage(uint thread,uint msg,nint w,nint l);
+    [DllImport("kernel32.dll")] internal static extern uint GetCurrentThreadId();
+    [DllImport("kernel32.dll",CharSet=CharSet.Unicode)] internal static extern nint GetModuleHandle(string? name);
+    [DllImport("user32.dll")] internal static extern nint WindowFromPoint(Point point);
+    [DllImport("user32.dll")] internal static extern nint GetAncestor(nint hwnd,uint flags);
+    [DllImport("user32.dll")] internal static extern bool PhysicalToLogicalPointForPerMonitorDPI(nint hwnd,ref Point point);
+    [DllImport("user32.dll")] internal static extern nint SendMessageTimeout(nint hwnd,uint msg,nint w,nint l,uint flags,uint timeout,out nint result);
+    [StructLayout(LayoutKind.Sequential)] internal struct Msg { public nint Hwnd; public uint Message; public nint W,L; public uint Time; public Point Point; }
+    [StructLayout(LayoutKind.Sequential)] internal struct MouseHookData { public Point Point; public uint MouseData,Flags,Time; public nint Extra; }
     [StructLayout(LayoutKind.Sequential)] internal struct Point { public int X,Y; public Point(int x,int y) { X=x;Y=y; } }
     [StructLayout(LayoutKind.Sequential)] internal struct Rect { public int Left,Top,Right,Bottom; }
     [StructLayout(LayoutKind.Sequential)] internal struct ThumbnailProperties
