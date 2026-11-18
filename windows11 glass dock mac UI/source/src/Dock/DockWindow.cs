@@ -67,6 +67,7 @@ public sealed class DockWindow : Window
     Guid? previousDesktop;
     readonly GenieAnimator genie;
     readonly MinimizeButtonHook minimizeHook;
+    AllDesktops? allDesktops;
     // Mode B: minimized windows shown as thumbnails between the apps and the trash.
     sealed class MinimizedSlot
     {
@@ -87,7 +88,7 @@ public sealed class DockWindow : Window
         this.recycleBin=recycleBin??new WindowsRecycleBin();
         StartupDiagnostics.Write("DockWindow constructor entered");
         catalog.PinnedPaths=settings.Pins;
-        Title="GlassDock 0.3.0 · 지니 최소화 효과"; WindowStyle=WindowStyle.None; ResizeMode=ResizeMode.NoResize;
+        Title="GlassDock 0.3.1 · 모든 데스크톱 표시"; WindowStyle=WindowStyle.None; ResizeMode=ResizeMode.NoResize;
         bool materialReview=Environment.GetEnvironmentVariable("GLASSDOCK_MATERIAL_REVIEW")=="1";
         Background=Brushes.Transparent; Topmost=true; ShowInTaskbar=materialReview; ShowActivated=materialReview;
         GlassBackdrop.Prepare(this);
@@ -122,7 +123,7 @@ public sealed class DockWindow : Window
         genie.RestoreStarted+=RefreshSlot;
         minimizeHook=new MinimizeButtonHook(Dispatcher,MinimizeFromButton) {Enabled=settings.GenieEnabled};
         handle.ContextMenu=BuildSettings();glass.ContextMenu=BuildSettings(); dockBody.Children.Add(handle); dockBody.Children.Add(iconViewport);dockBody.Children.Add(recycleSection);root.Children.Add(dockBody);
-        tray=new Forms.NotifyIcon { Icon=System.Drawing.SystemIcons.Application, Text="GlassDock 0.3.0", Visible=true };
+        tray=new Forms.NotifyIcon { Icon=System.Drawing.SystemIcons.Application, Text="GlassDock 0.3.1", Visible=true };
         StartupDiagnostics.Write("Tray icon created");
         var menu=new Forms.ContextMenuStrip(); menu.Items.Add("독 표시",null,(_,_)=>Dispatcher.Invoke(()=>{Show();Reveal();Place();}));
         menu.Items.Add("종료",null,(_,_)=>Dispatcher.Invoke(Close)); tray.ContextMenuStrip=menu; tray.DoubleClick+=(_,_)=>Dispatcher.Invoke(()=>{Show();Reveal();});
@@ -141,7 +142,7 @@ public sealed class DockWindow : Window
             StartupDiagnostics.Write($"Glass backdrop: {GlassBackdrop.MaterialDescription}; Windows {Environment.OSVersion.Version}; foreground AllowsTransparency={AllowsTransparency}");
             var hwnd=new WindowInteropHelper(this).Handle;
             HwndSource.FromHwnd(hwnd)?.AddHook((nint hookHwnd,int msg,nint w,nint l,ref bool handled)=>{if(msg==0x84&&hidden){handled=true;return (nint)(-1);}if(msg==0x21){handled=true;return (nint)3;}if(msg==0x02E0||msg==0x47)Dispatcher.BeginInvoke(UpdateGlassRegion,DispatcherPriority.Loaded);return 0;}); };
-        Loaded+=(_,_)=>{ foreground=Native.GetForegroundWindow();catalog.Refresh();Place();UpdateGlassRegion();RefreshRecycleBin();recycleTimer.Start();StartupDiagnostics.Write($"Loaded visible={IsVisible} size={ActualWidth}x{ActualHeight} position={Left},{Top} hwnd={new WindowInteropHelper(this).Handle}"); };
+        Loaded+=(_,_)=>{ allDesktops??=new AllDesktops(Dispatcher,m=>StartupDiagnostics.Write(m));foreground=Native.GetForegroundWindow();catalog.Refresh();Place();UpdateGlassRegion();RefreshRecycleBin();recycleTimer.Start();StartupDiagnostics.Write($"Loaded visible={IsVisible} size={ActualWidth}x{ActualHeight} position={Left},{Top} hwnd={new WindowInteropHelper(this).Handle}"); };
         ContentRendered+=(_,_)=>{UpdateGlassRegion();StartupDiagnostics.Write($"ContentRendered visible={IsVisible} size={ActualWidth}x{ActualHeight} position={Left},{Top}");};
         SizeChanged+=(_,_)=> { if(dockPointerDown&&movingDock)MoveDockWithPointer();else if(!dragging)Place();UpdateGlassRegion(); };
         LocationChanged+=(_,_)=>UpdateGlassRegion();
@@ -163,7 +164,7 @@ public sealed class DockWindow : Window
         edgeTimer.Tick+=(_,_)=>CheckEdge();edgeTimer.Start();
         recycleTimer.Tick+=(_,_)=>RefreshRecycleBin();
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged+=DisplayChanged;
-        Closed+=(_,_)=> { isClosed=true;minimizeHook.Dispose();genie.Dispose();edgeTimer.Stop();recycleTimer.Stop();activationTimer.Stop();hoverTimer.Stop();previewLeaveTimer.Stop();activePreview?.Close();catalog.Dispose();appIcons.Dispose();tray.Dispose();Microsoft.Win32.SystemEvents.DisplaySettingsChanged-=DisplayChanged;Save(); };
+        Closed+=(_,_)=> { isClosed=true;allDesktops?.Dispose();minimizeHook.Dispose();genie.Dispose();edgeTimer.Stop();recycleTimer.Stop();activationTimer.Stop();hoverTimer.Stop();previewLeaveTimer.Stop();activePreview?.Close();catalog.Dispose();appIcons.Dispose();tray.Dispose();Microsoft.Win32.SystemEvents.DisplaySettingsChanged-=DisplayChanged;Save(); };
         StartupDiagnostics.Write("DockWindow constructor completed");
     }
     void DisplayChanged(object? sender,EventArgs e)=>Dispatcher.BeginInvoke(()=>{activePreview?.Close();Place();Refresh();});
